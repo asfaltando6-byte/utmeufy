@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/supabase';
 import { encryptJson } from '@/lib/crypto';
-
-function admin(req: NextRequest) {
-  return !!process.env.DASHBOARD_SESSION_TOKEN && req.cookies.get('otr_admin')?.value === process.env.DASHBOARD_SESSION_TOKEN;
-}
+import { isAdminRequest } from '@/lib/admin-auth';
 
 export async function POST(req: NextRequest) {
-  if (!admin(req)) return NextResponse.json({error:'unauthorized'},{status:401});
+  if (!isAdminRequest(req)) return NextResponse.redirect(new URL('/login?error=1', req.url), 303);
   const form = await req.formData();
   const provider = String(form.get('provider') || '').toLowerCase().trim();
   if (!['wiapy','cakto','meta','generic'].includes(provider)) return NextResponse.json({error:'provider inválido'},{status:400});
