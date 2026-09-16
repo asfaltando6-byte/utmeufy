@@ -2,8 +2,11 @@ import crypto from 'crypto';
 
 function keyBuffer() {
   const raw = process.env.INTEGRATION_ENCRYPTION_KEY || '';
-  if (!/^[a-fA-F0-9]{64}$/.test(raw)) throw new Error('INTEGRATION_ENCRYPTION_KEY deve ter 64 caracteres hexadecimais');
-  return Buffer.from(raw, 'hex');
+  if (/^[a-fA-F0-9]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
+
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!serviceKey) throw new Error('Chave de criptografia indisponível');
+  return crypto.createHash('sha256').update(`utmeufy-integrations:${serviceKey}`).digest();
 }
 
 export function encryptJson(value: unknown) {
