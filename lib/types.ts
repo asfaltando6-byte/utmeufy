@@ -1,0 +1,1 @@
+export type TrackEvent={event_name:string;event_id:string;session_id:string;visitor_id:string;click_id?:string|null;site_id?:string|null;offer_id?:string|null;page_url:string;page_path:string;page_title?:string|null;referrer?:string|null;timestamp:string;properties?:Record<string,unknown>;attribution?:Record<string,string|null>;};
