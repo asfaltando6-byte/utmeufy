@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/supabase';
 import { encryptJson } from '@/lib/crypto';
+import { getIntegration, integrationSecrets } from '@/lib/integrations';
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -14,9 +15,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard/integracoes?meta_error=state', req.url));
   }
 
-  const appId = process.env.META_APP_ID || '';
-  const appSecret = process.env.META_APP_SECRET || '';
-  const graphVersion = process.env.META_GRAPH_VERSION || '';
+  const existingMeta = await getIntegration('meta').catch(() => null);
+  const existingSecrets = existingMeta ? integrationSecrets<{app_secret?:string;access_token?:string}>(existingMeta) : {};
+  const appId = String(existingMeta?.config_public?.app_id || process.env.META_APP_ID || '').trim();
+  const appSecret = String(existingSecrets.app_secret || process.env.META_APP_SECRET || '').trim();
+  const graphVersion = String(existingMeta?.config_public?.graph_version || process.env.META_GRAPH_VERSION || '').trim();
   const appUrl = (process.env.APP_URL || new URL(req.url).origin).replace(/\/$/, '');
   const redirectUri = `${appUrl}/api/meta/oauth/callback`;
 
@@ -63,19 +66,21 @@ export async function GET(req: NextRequest) {
 
     const selected = accounts.find((a:any) => Number(a.account_status) === 1) || accounts[0] || null;
     const db = getAdminDb();
-    const existing = await db.from('integrations').select('webhook_key').eq('provider','meta').maybeSingle();
+    const existing = await db.from('integrations').select('webhook_key,config_public').eq('provider','meta').maybeSingle();
     const row:any = {
       provider:'meta',
       name:'Meta Ads',
       status:'connected',
       config_public:{
+        ...(existing.data?.config_public || {}),
+        app_id: appId,
+        graph_version: graphVersion,
         ad_account_id:selected?.id || null,
         ad_account_name:selected?.name || null,
         accounts,
-        graph_version:graphVersion,
         connected_via:'oauth'
       },
-      secret_config:encryptJson({access_token:accessToken}),
+      secret_config:encryptJson({app_secret:appSecret,access_token:accessToken}),
       updated_at:new Date().toISOString()
     };
     if (!existing.data?.webhook_key) row.webhook_key = crypto.randomUUID();
