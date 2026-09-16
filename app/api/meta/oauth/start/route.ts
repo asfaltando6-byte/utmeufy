@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { isAdminRequest } from '@/lib/admin-auth';
+import { getIntegration, integrationSecrets } from '@/lib/integrations';
 
 export async function GET(req: NextRequest) {
   if (!isAdminRequest(req)) return NextResponse.redirect(new URL('/login?error=1', req.url));
 
-  const appId = process.env.META_APP_ID || '';
+  const meta = await getIntegration('meta').catch(() => null);
+  const secrets = meta ? integrationSecrets<{ app_secret?: string }>(meta) : {};
+  const appId = String(meta?.config_public?.app_id || process.env.META_APP_ID || '').trim();
+  const graphVersion = String(meta?.config_public?.graph_version || process.env.META_GRAPH_VERSION || '').trim();
+  const appSecret = String(secrets.app_secret || process.env.META_APP_SECRET || '').trim();
   const appUrl = (process.env.APP_URL || new URL(req.url).origin).replace(/\/$/, '');
-  const graphVersion = process.env.META_GRAPH_VERSION || '';
 
-  if (!appId || !graphVersion) {
+  if (!appId || !appSecret || !graphVersion) {
     return NextResponse.redirect(new URL('/dashboard/integracoes?meta_error=config', req.url));
   }
 
