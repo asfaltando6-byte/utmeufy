@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/supabase';
 import { getIntegration, integrationSecrets } from '@/lib/integrations';
-
-function isAdmin(req: NextRequest) {
-  const expected = process.env.DASHBOARD_PASSWORD || '';
-  const raw = req.cookies.get('otr_admin')?.value || '';
-  if (!expected || !raw) return false;
-  if (process.env.DASHBOARD_SESSION_TOKEN && raw === process.env.DASHBOARD_SESSION_TOKEN) return true;
-  const crypto = require('crypto');
-  return raw === crypto.createHash('sha256').update(expected).digest('hex');
-}
+import { isAdminRequest } from '@/lib/admin-auth';
 
 function ymd(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAdmin(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (!isAdminRequest(req)) return NextResponse.redirect(new URL('/login?error=1', req.url), 303);
 
   const integration = await getIntegration('meta');
   if (!integration) return NextResponse.redirect(new URL('/dashboard/integracoes?meta_error=not_connected', req.url), 303);
@@ -25,9 +17,9 @@ export async function POST(req: NextRequest) {
   const token = secrets.access_token;
   const rawAccount = String(integration.config_public?.ad_account_id || '').trim();
   const accountId = rawAccount.startsWith('act_') ? rawAccount : rawAccount ? `act_${rawAccount}` : '';
-  const version = String(integration.config_public?.graph_version || process.env.META_GRAPH_VERSION || 'v26.0').trim();
+  const version = String(integration.config_public?.graph_version || process.env.META_GRAPH_VERSION || '').trim();
 
-  if (!token || !accountId) {
+  if (!token || !accountId || !version) {
     return NextResponse.redirect(new URL('/dashboard/integracoes?meta_error=missing_credentials', req.url), 303);
   }
 
@@ -82,9 +74,8 @@ export async function POST(req: NextRequest) {
     }
 
     const db = getAdminDb();
-    const batchSize = 500;
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const { error } = await db.from('ad_metrics').upsert(rows.slice(i, i + batchSize), { onConflict: 'metric_date,platform,ad_id' });
+    for (let i = 0; i < rows.length; i += 500) {
+      const { error } = await db.from('ad_metrics').upsert(rows.slice(i, i + 500), { onConflict: 'metric_date,platform,ad_id' });
       if (error) throw error;
     }
 
